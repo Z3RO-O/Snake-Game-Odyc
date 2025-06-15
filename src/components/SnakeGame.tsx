@@ -13,12 +13,13 @@ export const SnakeGame: React.FC = () => {
   const { highScores, addScore, isNewRecord } = useHighScores();
   
   const [gameState, setGameState] = useState<GameState>({
-    snake: [{ x: 10, y: 10 }],
-    food: { x: 15, y: 10 },
+    snake: [{ x: 12, y: 12 }],
+    food: { x: 18, y: 12 },
     direction: { x: 1, y: 0 },
     score: 0,
     gameStarted: false,
-    playerName: ''
+    playerName: '',
+    paused: false
   });
 
   const [gameRunning, setGameRunning] = useState(false);
@@ -44,7 +45,7 @@ export const SnakeGame: React.FC = () => {
 
   // Initialize game
   const initializeGame = useCallback(() => {
-    const initialSnake = [{ x: 10, y: 10 }];
+    const initialSnake = [{ x: 12, y: 12 }];
     const newFood = generateFood(initialSnake);
     setGameState({
       snake: initialSnake,
@@ -52,7 +53,8 @@ export const SnakeGame: React.FC = () => {
       direction: { x: 1, y: 0 },
       score: 0,
       gameStarted: false,
-      playerName: '' // Clear the player name for new game
+      playerName: '', // Clear the player name for new game
+      paused: false
     });
     setGameRunning(false);
     setShowGameOver(false);
@@ -109,8 +111,6 @@ export const SnakeGame: React.FC = () => {
     setGameState(prev => ({ ...prev, score: newScore }));
   }, []);
 
-
-
   // Handle direction change
   const handleDirectionChange = useCallback((newDirection: Position) => {
     setGameState(prev => ({ ...prev, direction: newDirection }));
@@ -129,6 +129,11 @@ export const SnakeGame: React.FC = () => {
   // Handle player name change
   const handlePlayerNameChange = useCallback((name: string) => {
     setGameState(prev => ({ ...prev, playerName: name }));
+  }, []);
+
+  // Handle pause toggle
+  const handlePauseToggle = useCallback(() => {
+    setGameState(prev => ({ ...prev, paused: !prev.paused }));
   }, []);
 
   // Handle keyboard input for game controls
@@ -186,6 +191,7 @@ export const SnakeGame: React.FC = () => {
             onDirectionChange={handleDirectionChange}
             onSnakeUpdate={handleSnakeUpdate}
             onFoodUpdate={handleFoodUpdate}
+            onPauseToggle={handlePauseToggle}
             GRID_SIZE={GRID_SIZE}
             CANVAS_WIDTH={CANVAS_WIDTH}
             CANVAS_HEIGHT={CANVAS_HEIGHT}

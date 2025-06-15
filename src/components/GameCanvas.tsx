@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useCallback } from 'react';
+import { useAudio } from '@/hooks/useAudio';
 
 export interface Position {
   x: number;
@@ -12,6 +13,7 @@ export interface GameState {
   score: number;
   gameStarted: boolean;
   playerName: string;
+  paused: boolean;
 }
 
 interface GameCanvasProps {
@@ -21,6 +23,7 @@ interface GameCanvasProps {
   onDirectionChange: (direction: Position) => void;
   onSnakeUpdate: (snake: Position[]) => void;
   onFoodUpdate: (food: Position) => void;
+  onPauseToggle: () => void;
   GRID_SIZE: number;
   CANVAS_WIDTH: number;
   CANVAS_HEIGHT: number;
@@ -33,6 +36,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   onDirectionChange,
   onSnakeUpdate,
   onFoodUpdate,
+  onPauseToggle,
   GRID_SIZE,
   CANVAS_WIDTH,
   CANVAS_HEIGHT
@@ -40,17 +44,20 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameLoopRef = useRef<number | null>(null);
   const animationTimeRef = useRef<number>(0);
+  const { playBiteSound, playCollisionSound } = useAudio();
 
   // Generate random food position
   const generateFood = useCallback((snake: Position[]): Position => {
-    const maxX = Math.floor(CANVAS_WIDTH / GRID_SIZE) - 1;
-    const maxY = Math.floor(CANVAS_HEIGHT / GRID_SIZE) - 1;
+    const wallThickness = 8;
+    const gridWallThickness = Math.ceil(wallThickness / GRID_SIZE);
+    const maxX = Math.floor(CANVAS_WIDTH / GRID_SIZE) - 1 - gridWallThickness;
+    const maxY = Math.floor(CANVAS_HEIGHT / GRID_SIZE) - 1 - gridWallThickness;
     
     let food: Position;
     do {
       food = {
-        x: Math.floor(Math.random() * (maxX + 1)),
-        y: Math.floor(Math.random() * (maxY + 1))
+        x: Math.floor(Math.random() * (maxX - gridWallThickness + 1)) + gridWallThickness,
+        y: Math.floor(Math.random() * (maxY - gridWallThickness + 1)) + gridWallThickness
       };
     } while (snake.some(segment => segment.x === food.x && segment.y === food.y));
     
@@ -59,9 +66,14 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
   // Check collision with walls or self
   const checkCollision = useCallback((head: Position, snake: Position[]): boolean => {
-    // Wall collision
-    if (head.x < 0 || head.x >= Math.floor(CANVAS_WIDTH / GRID_SIZE) || 
-        head.y < 0 || head.y >= Math.floor(CANVAS_HEIGHT / GRID_SIZE)) {
+    const wallThickness = 8;
+    const gridWallThickness = Math.ceil(wallThickness / GRID_SIZE);
+    
+    // Wall collision - account for rock wall thickness
+    if (head.x < gridWallThickness || 
+        head.x >= Math.floor(CANVAS_WIDTH / GRID_SIZE) - gridWallThickness || 
+        head.y < gridWallThickness || 
+        head.y >= Math.floor(CANVAS_HEIGHT / GRID_SIZE) - gridWallThickness) {
       return true;
     }
     
@@ -209,7 +221,64 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     }
   }, [gameState.snake, gameState.direction, GRID_SIZE, getAnimatedPosition]);
 
-  // Drawing function
+  // Draw rock wall border
+  const drawRockWall = useCallback((ctx: CanvasRenderingContext2D) => {
+    const wallThickness = 8;
+    
+    // Create rock texture pattern
+    const createRockPattern = (x: number, y: number, width: number, height: number, seed: number) => {
+      // Base rock color
+      ctx.fillStyle = '#374151'; // gray-700
+      ctx.fillRect(x, y, width, height);
+      
+      // Use seed for consistent pattern
+      const random = (s: number) => {
+        const a = s * 15485863;
+        return (a * a * a % 2038074743) / 2038074743;
+      };
+      
+      // Add rock texture with consistent darker spots
+      for (let i = 0; i < Math.floor(width * height / 100); i++) {
+        const rockX = x + random(seed + i * 2) * width;
+        const rockY = y + random(seed + i * 2 + 1) * height;
+        const rockSize = random(seed + i * 3) * 4 + 2;
+        
+        ctx.fillStyle = '#1f2937'; // gray-800 (darker)
+        ctx.beginPath();
+        ctx.arc(rockX, rockY, rockSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      
+      // Add lighter highlights
+      for (let i = 0; i < Math.floor(width * height / 150); i++) {
+        const rockX = x + random(seed + i * 4 + 100) * width;
+        const rockY = y + random(seed + i * 4 + 101) * height;
+        const rockSize = random(seed + i * 4 + 102) * 3 + 1;
+        
+        ctx.fillStyle = '#6b7280'; // gray-500 (lighter)
+        ctx.beginPath();
+        ctx.arc(rockX, rockY, rockSize, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+    
+    // Draw walls with different seeds for variation
+    createRockPattern(0, 0, CANVAS_WIDTH, wallThickness, 12345); // Top wall
+    createRockPattern(0, CANVAS_HEIGHT - wallThickness, CANVAS_WIDTH, wallThickness, 23456); // Bottom wall
+    createRockPattern(0, 0, wallThickness, CANVAS_HEIGHT, 34567); // Left wall
+    createRockPattern(CANVAS_WIDTH - wallThickness, 0, wallThickness, CANVAS_HEIGHT, 45678); // Right wall
+    
+    // Add 3D effect with shadows
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    
+    // Top wall shadow
+    ctx.fillRect(0, wallThickness, CANVAS_WIDTH, 2);
+    
+    // Left wall shadow
+    ctx.fillRect(wallThickness, 0, 2, CANVAS_HEIGHT);
+  }, [CANVAS_WIDTH, CANVAS_HEIGHT]);
+
+  // Draw game
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -217,12 +286,15 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
-    // Update animation time
+    // Increment animation time for wave motion
     animationTimeRef.current += 0.1;
     
     // Clear canvas
     ctx.fillStyle = '#0f172a'; // slate-900
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    
+    // Draw rock wall border
+    drawRockWall(ctx);
     
     // Draw realistic snake
     drawRealisticSnake(ctx, animationTimeRef.current);
@@ -251,11 +323,11 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     ctx.moveTo(foodX, foodY - appleSize / 2);
     ctx.lineTo(foodX + 2, foodY - appleSize / 2 - 4);
     ctx.stroke();
-  }, [gameState.food, GRID_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, drawRealisticSnake]);
+  }, [gameState.food, GRID_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, drawRealisticSnake, drawRockWall]);
 
   // Game loop
   const gameLoop = useCallback(() => {
-    if (!gameState.gameStarted) return;
+    if (!gameState.gameStarted || gameState.paused) return;
 
     const newSnake = [...gameState.snake];
     const head = { ...newSnake[0] };
@@ -266,6 +338,8 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     
     // Check collision
     if (checkCollision(head, newSnake)) {
+      // Play collision sound
+      playCollisionSound();
       onGameOver();
       return;
     }
@@ -277,6 +351,9 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       const newScore = gameState.score + 10;
       onScoreUpdate(newScore);
       
+      // Play bite sound
+      playBiteSound();
+      
       // Generate new food
       const newFood = generateFood(newSnake);
       onFoodUpdate(newFood);
@@ -286,12 +363,22 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     
     onSnakeUpdate(newSnake);
     draw();
-  }, [gameState, onGameOver, onScoreUpdate, onFoodUpdate, onSnakeUpdate, generateFood, draw, checkCollision]);
+  }, [gameState, onGameOver, onScoreUpdate, onFoodUpdate, onSnakeUpdate, generateFood, draw, checkCollision, playBiteSound, playCollisionSound]);
 
   // Handle keyboard input
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if (!gameState.gameStarted) return;
+      
+      // Handle Esc key for pause toggle
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onPauseToggle();
+        return;
+      }
+      
+      // Don't handle direction changes when paused
+      if (gameState.paused) return;
       
       const keyDirections: { [key: string]: Position } = {
         'ArrowUp': { x: 0, y: -1 },
@@ -312,7 +399,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [gameState.direction, gameState.gameStarted, onDirectionChange]);
+  }, [gameState.direction, gameState.gameStarted, gameState.paused, onDirectionChange, onPauseToggle]);
 
   // Animation loop for continuous wave motion
   useEffect(() => {
@@ -358,8 +445,6 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
   }, [gameState.gameStarted, gameLoop]);
 
-
-
   return (
     <div className="flex flex-col items-center justify-center p-5 bg-slate-800/70 border-2 border-cyan-400/30 rounded-xl flex-1 h-full">
       <div className="mb-4 text-center">
@@ -403,6 +488,29 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
                 <p>🎮 Use arrow keys to control the snake</p>
                 <p>🍎 Eat food to grow and score points</p>
                 <p>⚠️ Don't hit walls or yourself!</p>
+                <p>⏸️ Press Esc to pause/unpause</p>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Pause Overlay */}
+        {gameState.gameStarted && gameState.paused && (
+          <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-sm border-2 border-orange-400 rounded-lg flex flex-col items-center justify-center">
+            <div className="text-center space-y-6">
+              <div className="text-6xl animate-pulse">⏸️</div>
+              <h3 className="text-3xl font-bold text-orange-400 mb-4">
+                Game Paused
+              </h3>
+              <div className="space-y-3 text-gray-300">
+                <p className="text-lg">Press Esc to resume</p>
+                <p className="text-sm">Your progress is saved!</p>
+              </div>
+              <div className="mt-8 space-y-2 text-sm text-gray-400">
+                <p>🎮 Use arrow keys to control the snake</p>
+                <p>🍎 Eat food to grow and score points</p>
+                <p>⚠️ Don't hit walls or yourself!</p>
+                <p>⏸️ Press Esc to pause/unpause</p>
               </div>
             </div>
           </div>
@@ -410,7 +518,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
       </div>
       
       <div className="mt-4 text-center text-gray-400 text-sm">
-        Use arrow keys to control the snake
+        Use arrow keys to control the snake • Press Esc to pause/unpause
       </div>
     </div>
   );
