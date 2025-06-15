@@ -1,5 +1,5 @@
 import React from 'react';
-import type { HighScore } from '../hooks/useHighScores';
+import type { HighScore } from '@/hooks/useHighScores';
 
 interface ControlPanelProps {
   playerName: string;
@@ -28,6 +28,12 @@ export const ControlPanel: React.FC<ControlPanelProps> = ({
           placeholder="Z3RO-O"
           value={playerName}
           onChange={(e) => onPlayerNameChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              onStartGame();
+            }
+          }}
           className="w-full px-3 py-2 text-white bg-gray-700 border-2 border-cyan-400 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-400"
         />
       </div>

@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { GameCanvas, type Position, type GameState } from './GameCanvas';
-import { ControlPanel } from './ControlPanel';
-import { GameOverModal } from './GameOverModal';
-import { useHighScores } from '../hooks/useHighScores';
+import { GameCanvas, type Position, type GameState } from '@/components/GameCanvas';
+import { ControlPanel } from '@/components/ControlPanel';
+import { GameOverModal } from '@/components/GameOverModal';
+import { Footer } from '@/components/Footer';
+import { useHighScores } from '@/hooks/useHighScores';
 
 const GRID_SIZE = 20;
 const CANVAS_WIDTH = 1000;
-const CANVAS_HEIGHT = 600;
+const CANVAS_HEIGHT = 500;
 
 export const SnakeGame: React.FC = () => {
   const { highScores, addScore, isNewRecord } = useHighScores();
@@ -163,32 +164,37 @@ export const SnakeGame: React.FC = () => {
   }, [gameRunning, gameState.gameStarted, showGameOver, startGame, newGame]);
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white">
-      {/* Control Panel */}
-      <div className="p-5 flex flex-col justify-start">
-        <ControlPanel
-          playerName={gameState.playerName}
-          onPlayerNameChange={handlePlayerNameChange}
-          onStartGame={startGame}
-          onNewGame={newGame}
-          highScores={highScores}
-        />
+    <>
+      <div className="flex h-screen pb-16 bg-gradient-to-br from-slate-900 via-gray-900 to-slate-800 text-white">
+        {/* Control Panel */}
+        <div className="p-5 flex flex-col justify-start">
+          <ControlPanel
+            playerName={gameState.playerName}
+            onPlayerNameChange={handlePlayerNameChange}
+            onStartGame={startGame}
+            onNewGame={newGame}
+            highScores={highScores}
+          />
+        </div>
+
+        {/* Game Area */}
+        <div className="flex-1 p-5 flex items-center justify-center min-w-0">
+          <GameCanvas
+            gameState={gameState}
+            onGameOver={handleGameOver}
+            onScoreUpdate={handleScoreUpdate}
+            onDirectionChange={handleDirectionChange}
+            onSnakeUpdate={handleSnakeUpdate}
+            onFoodUpdate={handleFoodUpdate}
+            GRID_SIZE={GRID_SIZE}
+            CANVAS_WIDTH={CANVAS_WIDTH}
+            CANVAS_HEIGHT={CANVAS_HEIGHT}
+          />
+        </div>
       </div>
 
-      {/* Game Area */}
-      <div className="flex-1 p-5 flex items-center justify-center min-w-0">
-        <GameCanvas
-          gameState={gameState}
-          onGameOver={handleGameOver}
-          onScoreUpdate={handleScoreUpdate}
-          onDirectionChange={handleDirectionChange}
-          onSnakeUpdate={handleSnakeUpdate}
-          onFoodUpdate={handleFoodUpdate}
-          GRID_SIZE={GRID_SIZE}
-          CANVAS_WIDTH={CANVAS_WIDTH}
-          CANVAS_HEIGHT={CANVAS_HEIGHT}
-        />
-      </div>
+      {/* Footer */}
+      <Footer />
 
       {/* Game Over Modal */}
       <GameOverModal
@@ -197,6 +203,6 @@ export const SnakeGame: React.FC = () => {
         isNewHighScore={isNewHighScore}
         onNewGame={newGame}
       />
-    </div>
+    </>
   );
 }; 
