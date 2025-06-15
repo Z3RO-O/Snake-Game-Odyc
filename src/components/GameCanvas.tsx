@@ -39,6 +39,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameLoopRef = useRef<number | null>(null);
+  const animationTimeRef = useRef<number>(0);
 
   // Generate random food position
   const generateFood = useCallback((snake: Position[]): Position => {
@@ -68,6 +69,146 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return snake.some(segment => segment.x === head.x && segment.y === head.y);
   }, [CANVAS_WIDTH, CANVAS_HEIGHT, GRID_SIZE]);
 
+  // Convert grid position to pixel position with wave animation
+  const getAnimatedPosition = useCallback((segment: Position, index: number, time: number) => {
+    const baseX = segment.x * GRID_SIZE + GRID_SIZE / 2;
+    const baseY = segment.y * GRID_SIZE + GRID_SIZE / 2;
+    
+    // Add wave motion based on segment index and time
+    const waveAmplitude = 3; // How much the snake waves
+    const waveFrequency = 0.3; // How fast the wave moves
+    const segmentOffset = index * 0.5; // Offset between segments
+    
+    const waveX = Math.sin(time * waveFrequency + segmentOffset) * waveAmplitude;
+    const waveY = Math.cos(time * waveFrequency + segmentOffset) * waveAmplitude * 0.5;
+    
+    return {
+      x: baseX + waveX,
+      y: baseY + waveY
+    };
+  }, [GRID_SIZE]);
+
+  // Draw realistic snake with curves
+  const drawRealisticSnake = useCallback((ctx: CanvasRenderingContext2D, time: number) => {
+    if (gameState.snake.length === 0) return;
+    
+    // Get animated positions for all segments
+    const animatedPositions = gameState.snake.map((segment, index) => 
+      getAnimatedPosition(segment, index, time)
+    );
+    
+    // Draw snake body as a curved path
+    if (animatedPositions.length > 1) {
+      ctx.strokeStyle = '#22d3ee'; // cyan-400
+      ctx.lineWidth = GRID_SIZE * 0.8;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      
+      // Create gradient for body
+      const gradient = ctx.createLinearGradient(
+        animatedPositions[0].x, animatedPositions[0].y,
+        animatedPositions[animatedPositions.length - 1].x, animatedPositions[animatedPositions.length - 1].y
+      );
+      gradient.addColorStop(0, '#06b6d4'); // Head color
+      gradient.addColorStop(0.3, '#22d3ee'); // Body color
+      gradient.addColorStop(1, '#0891b2'); // Tail color
+      ctx.strokeStyle = gradient;
+      
+      // Draw curved path through all segments
+      ctx.beginPath();
+      ctx.moveTo(animatedPositions[0].x, animatedPositions[0].y);
+      
+      for (let i = 1; i < animatedPositions.length; i++) {
+        const current = animatedPositions[i];
+        const previous = animatedPositions[i - 1];
+        
+        if (i === 1) {
+          ctx.lineTo(current.x, current.y);
+        } else {
+          // Use quadratic curves for smooth snake body
+          const controlX = (previous.x + current.x) / 2;
+          const controlY = (previous.y + current.y) / 2;
+          ctx.quadraticCurveTo(previous.x, previous.y, controlX, controlY);
+        }
+      }
+      ctx.stroke();
+      
+      // Draw body segments as circles for thickness variation
+      animatedPositions.forEach((pos, index) => {
+        const segmentSize = index === 0 ? GRID_SIZE * 0.6 : GRID_SIZE * 0.5 * (1 - index / animatedPositions.length * 0.3);
+        
+        ctx.fillStyle = index === 0 ? '#06b6d4' : '#22d3ee';
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, segmentSize / 2, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Add highlight for 3D effect
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.beginPath();
+        ctx.arc(pos.x - segmentSize * 0.2, pos.y - segmentSize * 0.2, segmentSize * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    
+    // Draw snake head with eyes
+    if (animatedPositions.length > 0) {
+      const head = animatedPositions[0];
+      const headSize = GRID_SIZE * 0.7;
+      
+      // Head shape
+      ctx.fillStyle = '#06b6d4';
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, headSize / 2, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Head highlight
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.beginPath();
+      ctx.arc(head.x - headSize * 0.2, head.y - headSize * 0.2, headSize * 0.25, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Eyes
+      const eyeSize = headSize * 0.15;
+      const eyeOffset = headSize * 0.25;
+      
+      // Determine eye position based on direction
+      let eyeX1, eyeY1, eyeX2, eyeY2;
+      if (gameState.direction.x !== 0) {
+        // Moving horizontally
+        eyeX1 = head.x + gameState.direction.x * eyeOffset;
+        eyeY1 = head.y - eyeOffset;
+        eyeX2 = head.x + gameState.direction.x * eyeOffset;
+        eyeY2 = head.y + eyeOffset;
+      } else {
+        // Moving vertically
+        eyeX1 = head.x - eyeOffset;
+        eyeY1 = head.y + gameState.direction.y * eyeOffset;
+        eyeX2 = head.x + eyeOffset;
+        eyeY2 = head.y + gameState.direction.y * eyeOffset;
+      }
+      
+      // Draw eyes
+      ctx.fillStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(eyeX1, eyeY1, eyeSize, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.beginPath();
+      ctx.arc(eyeX2, eyeY2, eyeSize, 0, Math.PI * 2);
+      ctx.fill();
+      
+      // Eye highlights
+      ctx.fillStyle = '#22d3ee';
+      ctx.beginPath();
+      ctx.arc(eyeX1 + eyeSize * 0.3, eyeY1 - eyeSize * 0.3, eyeSize * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.beginPath();
+      ctx.arc(eyeX2 + eyeSize * 0.3, eyeY2 - eyeSize * 0.3, eyeSize * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }, [gameState.snake, gameState.direction, GRID_SIZE, getAnimatedPosition]);
+
   // Drawing function
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -76,30 +217,41 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
+    // Update animation time
+    animationTimeRef.current += 0.1;
+    
     // Clear canvas
     ctx.fillStyle = '#0f172a'; // slate-900
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
-    // Draw snake
-    gameState.snake.forEach((segment, index) => {
-      ctx.fillStyle = index === 0 ? '#06b6d4' : '#22d3ee'; // cyan-500 for head, cyan-400 for body
-      ctx.fillRect(
-        segment.x * GRID_SIZE + 1,
-        segment.y * GRID_SIZE + 1,
-        GRID_SIZE - 2,
-        GRID_SIZE - 2
-      );
-    });
+    // Draw realistic snake
+    drawRealisticSnake(ctx, animationTimeRef.current);
     
-    // Draw food
-    ctx.fillStyle = '#fb923c'; // orange-400
-    ctx.fillRect(
-      gameState.food.x * GRID_SIZE + 1,
-      gameState.food.y * GRID_SIZE + 1,
-      GRID_SIZE - 2,
-      GRID_SIZE - 2
-    );
-  }, [gameState.snake, gameState.food, GRID_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT]);
+    // Draw food as an apple
+    const foodX = gameState.food.x * GRID_SIZE + GRID_SIZE / 2;
+    const foodY = gameState.food.y * GRID_SIZE + GRID_SIZE / 2;
+    const appleSize = GRID_SIZE * 0.8;
+    
+    // Apple body
+    ctx.fillStyle = '#dc2626'; // red-600
+    ctx.beginPath();
+    ctx.arc(foodX, foodY, appleSize / 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Apple highlight
+    ctx.fillStyle = '#fca5a5'; // red-300 (lighter red for highlight)
+    ctx.beginPath();
+    ctx.arc(foodX - appleSize * 0.2, foodY - appleSize * 0.2, appleSize * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Apple stem
+    ctx.strokeStyle = '#22c55e'; // green-500
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(foodX, foodY - appleSize / 2);
+    ctx.lineTo(foodX + 2, foodY - appleSize / 2 - 4);
+    ctx.stroke();
+  }, [gameState.food, GRID_SIZE, CANVAS_WIDTH, CANVAS_HEIGHT, drawRealisticSnake]);
 
   // Game loop
   const gameLoop = useCallback(() => {
@@ -162,6 +314,28 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     return () => window.removeEventListener('keydown', handleKeyPress);
   }, [gameState.direction, gameState.gameStarted, onDirectionChange]);
 
+  // Animation loop for continuous wave motion
+  useEffect(() => {
+    let animationId: number;
+    
+    const animate = () => {
+      draw();
+      animationId = requestAnimationFrame(animate);
+    };
+    
+    if (gameState.gameStarted) {
+      animate();
+    } else {
+      draw(); // Draw once when not started
+    }
+    
+    return () => {
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+    };
+  }, [draw, gameState.gameStarted]);
+
   // Game loop effect
   useEffect(() => {
     if (gameState.gameStarted) {
@@ -184,10 +358,7 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
     };
   }, [gameState.gameStarted, gameLoop]);
 
-  // Initial draw
-  useEffect(() => {
-    draw();
-  }, [draw, gameState]);
+
 
   return (
     <div className="flex flex-col items-center justify-center p-5 bg-slate-800/70 border-2 border-cyan-400/30 rounded-xl flex-1 h-full">
