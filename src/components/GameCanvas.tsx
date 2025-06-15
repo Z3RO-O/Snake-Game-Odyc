@@ -207,13 +207,36 @@ export const GameCanvas: React.FC<GameCanvasProps> = ({
         </div>
       </div>
       
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
-        className="border-2 border-cyan-400 rounded-lg bg-slate-900 max-w-full max-h-full focus:outline-none focus:ring-2 focus:ring-cyan-400"
-        tabIndex={0}
-      />
+      <div className="relative">
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          className="border-2 border-cyan-400 rounded-lg bg-slate-900 max-w-full max-h-full focus:outline-none focus:ring-2 focus:ring-cyan-400"
+          tabIndex={0}
+        />
+        
+        {/* Game Cover Overlay */}
+        {!gameState.gameStarted && (
+          <div className="absolute inset-0 bg-slate-900/95 backdrop-blur-sm border-2 border-cyan-400 rounded-lg flex flex-col items-center justify-center">
+            <div className="text-center space-y-6">
+              <div className="text-6xl animate-pulse">🐍</div>
+              <h3 className="text-3xl font-bold text-cyan-400 mb-4">
+                Ready to Play?
+              </h3>
+              <div className="space-y-3 text-gray-300">
+                <p className="text-lg">Enter your name and click Start Game</p>
+                <p className="text-sm">or press Enter to begin!</p>
+              </div>
+              <div className="mt-8 space-y-2 text-sm text-gray-400">
+                <p>🎮 Use arrow keys to control the snake</p>
+                <p>🍎 Eat food to grow and score points</p>
+                <p>⚠️ Don't hit walls or yourself!</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
       
       <div className="mt-4 text-center text-gray-400 text-sm">
         Use arrow keys to control the snake
